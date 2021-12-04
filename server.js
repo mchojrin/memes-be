@@ -5,18 +5,26 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const utils = require('./utils');
+const db = require('./models');
+const dbConfig = require('./db.config');
+const { json } = require('body-parser');
+const User = db.user;
 
 const app = express();
 const port = process.env.PORT || 4000;
 
-// static user details
-const userData = {
-  userId: "789789",
-  password: "123456",
-  name: "Mauro Chojrin",
-  username: "mchojrin",
-  isAdmin: true
-};
+db.mongoose
+  .connect(`mongodb://${dbConfig.HOST}:${dbConfig.PORT}/${dbConfig.DB}`, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+  })
+  .then(() => {
+    console.log("Successfully connected to MongoDB:" + JSON.stringify(dbConfig));
+  })
+  .catch(err => {
+    console.error("Connection error", err);
+    process.exit();
+  });
 
 // enable CORS
 app.use(cors());
@@ -57,6 +65,8 @@ app.post('/users/signin', function (req, res) {
   const user = req.body.username;
   const pwd = req.body.password;
 
+  console.log('Login attempt ' + JSON.stringify(req.body));
+
   // return 400 status if username/password is not exist
   if (!user || !pwd) {
     return res.status(400).json({
@@ -65,20 +75,42 @@ app.post('/users/signin', function (req, res) {
     });
   }
 
-  // return 401 status if the credential is not match.
-  if (user !== userData.username || pwd !== userData.password) {
-    return res.status(401).json({
-      error: true,
-      message: "Username or Password is wrong."
-    });
-  }
+  console.log('Looking into the DB for a user ' + user);
+  User.findOne({
+    username: user
+  }).exec(
+    (err, user) => {
+      if (err) {
+        console.log('Error' + err);
+        res.status(500).send({ message: err });
+        return;
+      }
 
-  // generate token
-  const token = utils.generateToken(userData);
-  // get basic user details
-  const userObj = utils.getCleanUser(userData);
-  // return the token along with user details
-  return res.json({ user: userObj, token });
+      if (!user) {
+        console.log('Not found');
+        res.status(404).send({ message: "No such user!" });
+
+        return;
+      } else {
+        console.log('User found, checking password');
+        if (user.password != pwd) {
+          console.log('Password doesn\'t match');
+          return res.status(401).json({
+            error: true,
+            message: "Username or Password is wrong."
+          });
+        }
+
+        console.log('Password ok, generating token');
+        // generate token
+        const token = utils.generateToken(user);
+        // get basic user details
+        const userObj = utils.getCleanUser(user);
+        // return the token along with user details
+        return res.json({ user: userObj, token });
+      }
+    }
+  );
 });
 
 // verify the token and return it if it's valid
