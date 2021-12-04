@@ -9,6 +9,7 @@ const db = require('./models');
 const dbConfig = require('./db.config');
 const { json } = require('body-parser');
 const User = db.user;
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -92,26 +93,111 @@ app.post('/users/signin', function (req, res) {
 
         return;
       } else {
-        console.log('User found, checking password');
-        if (user.password != pwd) {
-          console.log('Password doesn\'t match');
-          return res.status(401).json({
-            error: true,
-            message: "Username or Password is wrong."
-          });
-        }
+        console.log('User found, checking password "' + pwd + '" against "' + user.password + '"');
+        bcrypt.compare(pwd, user.password, (err, isMatch) => {
+          if (err) {
+            console.log('Error checking password ' + err);
 
-        console.log('Password ok, generating token');
-        // generate token
-        const token = utils.generateToken(user);
-        // get basic user details
-        const userObj = utils.getCleanUser(user);
-        // return the token along with user details
-        return res.json({ user: userObj, token });
+            return res.status(500).json({
+              error: true,
+              message: "Error checking password."
+            });
+          }
+
+          if (!isMatch) {
+            console.log('Passwords don\'t match');
+
+            return res.status(401).json({
+              error: true,
+              message: "Username or password incorrect."
+            });
+          }
+
+          console.log('Password ok, generating token');
+          // generate token
+          const token = utils.generateToken(user);
+          // get basic user details
+          const userObj = utils.getCleanUser(user);
+          // return the token along with user details
+          return res.json({ user: userObj, token });
+        }); 
       }
-    }
-  );
-});
+    });
+  });
+
+
+// validate the user credentials
+app.post('/users/signup', function (req, res) {
+  const user = req.body.username;
+  const pwd = req.body.password;
+  const name = req.body.name;
+
+  console.log('Signup attempt ' + JSON.stringify(req.body));
+
+  // return 400 status if username/password is not exist
+  if (!user || !pwd || !name) {
+    console.log('Incomplete request ' + JSON.stringify(req.body));
+
+    return res.status(400).json({
+      error: true,
+      message: "Username, Password and name are required."
+    });
+  }
+
+  console.log('Looking into the DB for a user ' + user);
+  User.findOne({
+    username: user
+  }).exec(
+    (err, user) => {
+      if (err) {
+        console.log('Error' + err);
+        res.status(500).send({ message: err });
+        return;
+      }
+
+      if (user) {
+        console.log('User already in the db');
+        res.status(400).send({ message: "Username is already in use!" });
+
+        return;
+      } else {
+        console.log('User not found, creating');
+        bcrypt.hash(req.body.password, 8, (err, hashedPassword) => {
+          if (err) {
+            console.log('Error hashing password: ' + err);
+            return err;
+          }
+
+          // Display the hashed password
+          console.log('Hashed password "' + hashedPassword + '"');
+          const user = new User({
+            username: req.body.username,
+            name: req.body.name,
+            password: hashedPassword
+          });
+  
+          console.log('Saving user ' + JSON.stringify(user));
+  
+          user.save((err, user) => {
+            if (err) {
+              console.log('Error saving user: ' + err);
+              res.status(500).send({ message: err });
+              return;
+            }
+  
+            console.log('User saved');
+          });
+  
+          // generate token
+          const token = utils.generateToken(user);
+          // get basic user details
+          const userObj = utils.getCleanUser(user);
+          // return the token along with user details
+          return res.json({ user: userObj, token });
+        });
+      }
+    });
+  });
 
 // verify the token and return it if it's valid
 app.get('/verifyToken', function (req, res) {
