@@ -10,6 +10,7 @@ const dbConfig = require('./db.config');
 const { json } = require('body-parser');
 const User = db.user;
 const bcrypt = require('bcryptjs');
+const fileUpload = require('express-fileupload');
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -54,6 +55,9 @@ app.use(function (req, res, next) {
     }
   });
 });
+
+app.use(fileUpload({
+}));
 
 // request handlers
 app.get('/', (req, res) => {
@@ -120,10 +124,10 @@ app.post('/users/signin', function (req, res) {
           const userObj = utils.getCleanUser(user);
           // return the token along with user details
           return res.json({ user: userObj, token });
-        }); 
+        });
       }
     });
-  });
+});
 
 
 // validate the user credentials
@@ -175,19 +179,19 @@ app.post('/users/signup', function (req, res) {
             name: req.body.name,
             password: hashedPassword
           });
-  
+
           console.log('Saving user ' + JSON.stringify(user));
-  
+
           user.save((err, user) => {
             if (err) {
               console.log('Error saving user: ' + err);
               res.status(500).send({ message: err });
               return;
             }
-  
+
             console.log('User saved');
           });
-  
+
           // generate token
           const token = utils.generateToken(user);
           // get basic user details
@@ -197,7 +201,29 @@ app.post('/users/signup', function (req, res) {
         });
       }
     });
+});
+
+app.post('/memes/upload', function (req, res) {
+  if (!req.files || Object.keys(req.files).length === 0) {
+    return res.status(400).send('No files were uploaded.');
+  }
+
+  let uploadedFile = req.files.File;
+  console.log('Trying to upload a file: ' + JSON.stringify(uploadedFile.name));
+
+  uploadPath = __dirname + '/uploads/' + uploadedFile.name;
+
+  console.log('Moving file to uploads directory');
+  uploadedFile.mv(uploadPath, function(err) {
+    if (err) {
+      console.log('Upload failed: ' + err);
+      return res.status(500).send(err);
+    }
+
+    console.log('Upload succesful!');
+    res.send('File uploaded!');
   });
+});
 
 // verify the token and return it if it's valid
 app.get('/verifyToken', function (req, res) {
