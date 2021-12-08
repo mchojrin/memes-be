@@ -11,6 +11,7 @@ const { json } = require('body-parser');
 const User = db.user;
 const bcrypt = require('bcryptjs');
 const fileUpload = require('express-fileupload');
+const Meme = require('./models/meme.model');
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -38,26 +39,33 @@ app.use(bodyParser.urlencoded({ extended: true }));
 //middleware that checks if JWT token exists and verifies it if it does exist.
 //In all future routes, this helps to know if the request is authenticated or not.
 app.use(function (req, res, next) {
+  console.log('JWT middleware check');
   // check header or url parameters or post parameters for token
   var token = req.headers['authorization'];
-  if (!token) return next(); //if no token, continue
+  if (!token) {
+    console.log('No token found. Headers: ' + JSON.stringify(req.headers));
+    return next(); //if no token, continue
+  }
 
   token = token.replace('Bearer ', '');
+  console.log('Token = ' + token);
   jwt.verify(token, process.env.JWT_SECRET, function (err, user) {
     if (err) {
+      console.log('Invalid user ' + err.message);
       return res.status(401).json({
         error: true,
         message: "Invalid user."
       });
     } else {
+      console.log('Setting user for upcoming requests');
+
       req.user = user; //set the user to req so other routes can use it
       next();
     }
   });
 });
 
-app.use(fileUpload({
-}));
+app.use(fileUpload());
 
 // request handlers
 app.get('/', (req, res) => {
@@ -74,6 +82,7 @@ app.post('/users/signin', function (req, res) {
 
   // return 400 status if username/password is not exist
   if (!user || !pwd) {
+
     return res.status(400).json({
       error: true,
       message: "Username and Password is required."
@@ -88,6 +97,7 @@ app.post('/users/signin', function (req, res) {
       if (err) {
         console.log('Error' + err);
         res.status(500).send({ message: err });
+
         return;
       }
 
@@ -214,15 +224,49 @@ app.post('/memes/upload', function (req, res) {
   uploadPath = __dirname + '/uploads/' + uploadedFile.name;
 
   console.log('Moving file to uploads directory');
-  uploadedFile.mv(uploadPath, function(err) {
+  uploadedFile.mv(uploadPath, function (err) {
     if (err) {
       console.log('Upload failed: ' + err);
+
       return res.status(500).send(err);
     }
 
-    console.log('Upload succesful!');
-    res.send('File uploaded!');
+    console.log('File moved to uploads directory');
+    const meme = new Meme({
+      path: uploadPath
+    });
+
+    console.log('Saving meme ' + JSON.stringify(meme));
+    meme.save((err, meme) => {
+      if (err) {
+        console.log('Error saving meme: ' + err);
+        res.status(500).send({ message: err });
+
+        return;
+      }
+
+      console.log('Meme saved');
+      console.log('Adding meme to user\'s collection');
+      console.log('User: ' + JSON.stringify(req.user));
+      User.findOneAndUpdate( {
+        username: req.user.username
+      }, {
+        $addToSet: { memes: meme.id } 
+      }, {}, (err, doc, res ) => {
+        if (err) {
+          console.log('User not updated ' + err.message );
+          res.status(500).send({ message: err });
+
+          return;
+        }
+        console.log('User updated');
+      });
+    });
   });
+});
+
+app.get('/memes/get', function (req, res) {
+
 });
 
 // verify the token and return it if it's valid

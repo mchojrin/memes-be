@@ -5,7 +5,8 @@ const User = mongoose.model(
   new mongoose.Schema({
     username: String,
     password: String,
-    name: String
+    name: String,
+    memes: Array
   })
 );
 
