@@ -69,7 +69,10 @@ app.use(fileUpload());
 
 // request handlers
 app.get('/', (req, res) => {
-  if (!req.user) return res.status(401).json({ success: false, message: 'Invalid user to access it.' });
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Invalid user to access it.' });
+  }
+
   res.send('Welcome to the Node.js Tutorial! - ' + req.user.name);
 });
 
@@ -237,7 +240,7 @@ app.post('/memes/upload', function (req, res) {
     });
 
     console.log('Saving meme ' + JSON.stringify(meme));
-    meme.save((err, meme) => {
+    meme.save(async (err, meme) => {
       if (err) {
         console.log('Error saving meme: ' + err);
         res.status(500).send({ message: err });
@@ -248,25 +251,69 @@ app.post('/memes/upload', function (req, res) {
       console.log('Meme saved');
       console.log('Adding meme to user\'s collection');
       console.log('User: ' + JSON.stringify(req.user));
-      User.findOneAndUpdate( {
+      User.findOneAndUpdate({
         username: req.user.username
       }, {
-        $addToSet: { memes: meme.id } 
-      }, {}, (err, doc, res ) => {
+        $addToSet: { memes: meme.id }
+      }, {
+        new: true
+      }, (err, doc) => {
         if (err) {
-          console.log('User not updated ' + err.message );
+          console.log('User not updated: ' + err.message);
           res.status(500).send({ message: err });
-
+  
           return;
         }
-        console.log('User updated');
+
+        console.log('User updated ' + JSON.stringify(doc));
+        res.send('Upload completed');
+
+        return;
       });
     });
   });
 });
 
-app.get('/memes/get', function (req, res) {
+app.get('/memes/', function (req, res) {
+  console.log('Getting memes for current user');
+  User.findOne({
+    username: req.user.username
+  }).exec((err, user) => {
+    if (err) {
+      console.log('Error: ' + err.message);
+      res.status(500).send({ message: err });
 
+      return;      
+    }
+
+    if (!user) {
+      console.log('User not found ' + req.user.username);
+      res.status(500).send({ message: err });
+
+      return;
+    }
+
+    console.log('User found ' + JSON.stringify(user));
+    const memeIds = user.memes;
+    Meme
+      .find()
+      .where('_id')
+      .in(memeIds)
+      .exec((err, records) => {
+        if (err) {
+          console.log('Error fetching memes: ' + err.message);
+          res.status(500).send({ message: err });
+
+          return;
+        }
+
+        console.log('Building memes urls');
+
+        res.send(records.map((record) => {
+          return 'http://localhost:4000/meme/' + record.id
+        }));
+    });
+  });
 });
 
 // verify the token and return it if it's valid
