@@ -277,45 +277,65 @@ app.post('/memes/upload', function (req, res) {
 });
 
 app.get('/memes/', function (req, res) {
-  console.log('Getting memes for current user');
-  User.findOne({
-    username: req.user.username
-  }).exec((err, user) => {
-    if (err) {
-      console.log('Error: ' + err.message);
-      res.status(500).send({ message: err });
+  if (req.user) {
+    console.log('Getting memes for current user');
+    User.findOne({
+      username: req.user.username
+    }).exec((err, user) => {
+      if (err) {
+        console.log('Error: ' + err.message);
+        res.status(500).send({ message: err });
+  
+        return;
+      }
+  
+      if (!user) {
+        console.log('User not found ' + req.user.username);
+        res.status(500).send({ message: err });
+  
+        return;
+      }
+  
+      console.log('User found ' + JSON.stringify(user));
+      const memeIds = user.memes;
+      Meme
+        .find()
+        .where('_id')
+        .in(memeIds)
+        .exec((err, records) => {
+          if (err) {
+            console.log('Error fetching memes: ' + err.message);
+            res.status(500).send({ message: err });
+  
+            return;
+          }
+  
+          console.log('Building memes urls');
+  
+          res.send(records.map((record) => {
+            return 'http://localhost:4000/meme/' + record.id
+          }));
+        });
+    });
+  } else {
+    console.log('Getting all memes');
 
-      return;
-    }
-
-    if (!user) {
-      console.log('User not found ' + req.user.username);
-      res.status(500).send({ message: err });
-
-      return;
-    }
-
-    console.log('User found ' + JSON.stringify(user));
-    const memeIds = user.memes;
-    Meme
-      .find()
-      .where('_id')
-      .in(memeIds)
-      .exec((err, records) => {
-        if (err) {
-          console.log('Error fetching memes: ' + err.message);
-          res.status(500).send({ message: err });
-
-          return;
-        }
-
-        console.log('Building memes urls');
-
-        res.send(records.map((record) => {
-          return 'http://localhost:4000/meme/' + record.id
-        }));
-      });
-  });
+    Meme.find()
+        .exec((err, records) => {
+          if (err) {
+            console.log('Error fetching memes: ' + err.message);
+            res.status(500).send({ message: err });
+  
+            return;
+          }
+  
+          console.log('Building memes urls');
+  
+          res.send(records.map((record) => {
+            return 'http://localhost:4000/meme/' + record.id
+          }));
+        });
+  }
 });
 
 app.get('/meme/:memeId', function (req, res) 
