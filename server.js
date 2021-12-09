@@ -12,6 +12,8 @@ const User = db.user;
 const bcrypt = require('bcryptjs');
 const fileUpload = require('express-fileupload');
 const Meme = require('./models/meme.model');
+const mime = require('mime-types');
+const fs = require("fs");
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -261,7 +263,7 @@ app.post('/memes/upload', function (req, res) {
         if (err) {
           console.log('User not updated: ' + err.message);
           res.status(500).send({ message: err });
-  
+
           return;
         }
 
@@ -283,7 +285,7 @@ app.get('/memes/', function (req, res) {
       console.log('Error: ' + err.message);
       res.status(500).send({ message: err });
 
-      return;      
+      return;
     }
 
     if (!user) {
@@ -312,7 +314,30 @@ app.get('/memes/', function (req, res) {
         res.send(records.map((record) => {
           return 'http://localhost:4000/meme/' + record.id
         }));
-    });
+      });
+  });
+});
+
+app.get('/meme/:memeId', function (req, res) 
+{
+  const memeId = req.params.memeId;
+  console.log('Looking for meme ' + memeId);
+  Meme.findById(memeId).exec((err, meme) => {
+    if (err) {
+      console.log('Couldn\'t locate the meme: ' + memeId);
+      return res.status(404).json({
+        error: true,
+        message: "Couldn't locate the meme: " + memeId
+      });
+    }
+
+    console.log('Got the meme, path: ' + meme.path);
+    const mimeType = mime.lookup(meme.path);
+    console.log('Mime type: ' + mimeType);
+    res.contentType(mimeType);
+    console.log('Reading file contents');
+    const data = fs.readFileSync(meme.path);
+    res.end(data);
   });
 });
 
